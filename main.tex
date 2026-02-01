@@ -1,0 +1,99 @@
+\section{Evaluation}
+
+We evaluate consequence models on synthetic data designed to expose
+cross-dimensional structure. The goal is not to optimize performance but to
+illustrate when learned models outperform rule-based systems.
+
+\subsection{Setup}
+
+\paragraph{Data.}
+We generate $n = 100{,}000$ requests. Each request $x \in \mathbb{R}^{d}$ has
+$d = 22$ features spanning three dimensions: identity (role, privilege,
+reputation, origin), action (operation type, target sensitivity, payload risk),
+and behavior (request rate, anomaly score, location consistency, time of day).
+The label $y \in \{0,1\}$ indicates whether execution causes harm.
+
+Requests fall into four categories:
+\begin{itemize}[leftmargin=*, itemsep=2pt, topsep=2pt]
+\item \emph{Benign} (40\%): all features drawn from safe distributions.
+\item \emph{Single-dimension attacks} (20\%): one feature clearly anomalous.
+\item \emph{Cross-dimensional attacks} (30\%): each feature within normal range; combination indicates harm.
+\item \emph{Evasive attacks} (10\%): all features slightly shifted; no single indicator.
+\end{itemize}
+
+We use a 60/20/20 train/validation/test split.
+
+\paragraph{Models.}
+We compare four model classes:
+\begin{itemize}[leftmargin=*, itemsep=2pt, topsep=2pt]
+\item \emph{Rules}: conjunction of RBAC, payload filter ($\tau = 0.7$), and rate limiter ($\tau = 0.75$).
+\item \emph{Factored}: logistic regression per dimension, combined by weighted sum.
+\item \emph{Monotone}: MLP with monotonicity constraints.
+\item \emph{Full MLP}: unconstrained MLP on all features.
+\end{itemize}
+
+\paragraph{Metrics.}
+Let $\hat{y}(x)$ denote the model prediction. We report:
+\begin{align*}
+\text{FAR} &= \mathbb{P}[\hat{y}(x) = 0 \mid y = 1] \\
+\text{FRR} &= \mathbb{P}[\hat{y}(x) = 1 \mid y = 0] \\
+\text{ECE} &= \sum_{b=1}^{B} \frac{|S_b|}{n} \left| \text{acc}(S_b) - \text{conf}(S_b) \right|
+\end{align*}
+where FAR is false accept rate, FRR is false reject rate, and ECE is expected
+calibration error over $B = 10$ bins.
+
+\subsection{Results}
+
+Table~\ref{tab:results} and Figure~\ref{fig:results} summarize the findings.
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lcccc}
+\toprule
+Model & FAR & FRR & Accuracy & ECE \\
+\midrule
+Rules    & 0.65 & 0.00 & 0.61 & 0.33 \\
+Factored & 0.02 & 0.25 & 0.88 & 0.23 \\
+Monotone & 0.01 & 0.01 & 0.99 & 0.00 \\
+Full MLP & 0.01 & 0.01 & 0.99 & 0.01 \\
+\bottomrule
+\end{tabular}
+\caption{Overall metrics on test set.}
+\label{tab:results}
+\end{table}
+
+\paragraph{Single-dimension attacks.}
+All models achieve low FAR on attacks with one clear anomalous feature. Rules
+attain 0\% FAR by construction. Learned models match this.
+
+\paragraph{Cross-dimensional attacks.}
+Rules fail: FAR $= 97\%$. Each feature falls within its threshold, so no rule
+triggers. Learned models capture the joint distribution and reduce FAR to
+$< 1\%$.
+
+\paragraph{Evasive attacks.}
+Rules fail completely: FAR $= 100\%$. Learned models achieve FAR $< 1\%$ by
+detecting distributional shift across all features.
+
+\paragraph{Calibration.}
+Rules produce binary outputs with ECE $= 0.33$. Learned models produce
+calibrated probabilities: ECE $\leq 0.01$ for Monotone and Full MLP.
+
+\subsection{Decision Boundaries}
+
+Figure~\ref{fig:results}(b,c) projects the test set onto two principal
+dimensions. Rules partition the space with axis-aligned thresholds, missing
+attacks in the interior. Learned models fit curved boundaries that separate the
+classes.
+
+\subsection{Discussion}
+
+The experiment confirms the central claim: cross-dimensional structure matters.
+When harmful requests appear benign along each dimension but anomalous in
+combination, rules fail and learned models succeed. The gap is large: 97\% FAR
+versus $< 1\%$.
+
+Limitations: the data is synthetic and the attacks are constructed. Real
+distributions may differ. The experiment illustrates the structure of the
+problem, not deployment performance.
